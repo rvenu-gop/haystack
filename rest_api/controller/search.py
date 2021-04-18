@@ -71,4 +71,12 @@ def _process_request(pipeline, request) -> Response:
     end_time = time.time()
     logger.info(json.dumps({"request": request.dict(), "response": result, "time": f"{(end_time - start_time):.2f}"}))
 
+    try:
+        from .autocomplete import addQuestionToAutocomplete
+        # remember questions with result in the autocomplete
+        if len(request.query) > 10:
+                addQuestionToAutocomplete(request.query)
+    except:
+        logger.warning("Autocomplete insert failed!")
+
     return result

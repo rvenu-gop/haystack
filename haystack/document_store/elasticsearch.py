@@ -277,6 +277,9 @@ class ElasticsearchDocumentStore(BaseDocumentStore):
             self.faq_question_field if self.faq_question_field else "question": "question"
         }
 
+    def get_elastic_client(self):
+        return self.client
+
     def get_document_by_id(self, id: str, index: Optional[str] = None) -> Optional[Document]:
         """Fetch a document by specifying its text id string"""
         index = index or self.index

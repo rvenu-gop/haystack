@@ -1,6 +1,6 @@
 import logging
 from collections import OrderedDict
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -10,6 +10,8 @@ from haystack import Document
 from haystack.document_store.elasticsearch import ElasticsearchDocumentStore
 from haystack.retriever.base import BaseRetriever
 from collections import namedtuple
+import numpy as np
+from scipy.special import expit
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,66 @@ class ElasticsearchRetriever(BaseRetriever):
         documents = self.document_store.query(query, filters, top_k, self.custom_query, index)
         return documents
 
+class ElasticsearchHighlightRetriever(BaseRetriever):
+    def __init__(self, document_store: ElasticsearchDocumentStore, top_k: int = 10):
+        """
+        :param document_store: an instance of a DocumentStore to retrieve documents from.
+        :param top_k: How many documents to return per query.
+        """
+        self.document_store: ElasticsearchDocumentStore = document_store
+        self.top_k = top_k
+
+    def retrieve(self, query: str, filters: dict = None, top_k: Optional[int] = None, index: str = None) -> List[Document]:
+        """
+        Scan through documents in DocumentStore and return a small number documents
+        that are most relevant to the query.
+
+        :param query: The query
+        :param filters: A dictionary where the keys specify a metadata field and the value is a list of accepted values for that field
+        :param top_k: How many documents to return per query.
+        :param index: The name of the index in the DocumentStore from which to retrieve documents
+        """
+        if top_k is None:
+            top_k = self.top_k
+        if index is None:
+            index = self.document_store.index
+
+        body = {
+            "query": {
+                "multi_match": {
+                    "query": query,
+                    "fields": ["text", "name"]
+                }
+            },
+            "highlight": {
+                "fields": {
+                    "text": {}
+                }
+            },
+            "_source": True
+        }
+        es_client = self.document_store.get_elastic_client()
+        result = es_client.search(index=index, body=body)["hits"]["hits"]
+        documents = []
+        for hit in result:
+            score = hit["_score"] if hit["_score"] else None
+            if score:
+                probability = float(expit(np.asarray(score / 8)))  # scaling probability from TFIDF/BM25
+            else:
+                probability = None
+            answer = hit['highlight']['text'][0]
+            answer = answer.replace("<em>", "")
+            answer = answer.replace("</em>", "")
+            document = Document(
+                id=hit["_id"],
+                text=hit["_source"].get("text"),
+                meta={"answer": answer},
+                score=score,
+                probability=probability,
+                question=query,
+            )
+            documents.append(document)
+        return documents
 
 class ElasticsearchFilterOnlyRetriever(ElasticsearchRetriever):
     """

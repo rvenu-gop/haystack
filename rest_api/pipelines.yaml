@@ -6,7 +6,7 @@ components:    # define all the building-blocks for Pipeline
     params:
       host: localhost
   - name: ESRetriever
-    type: ElasticsearchRetriever
+    type: ElasticsearchHighlightRetriever
     params:
       document_store: ElasticsearchDocumentStore    # params can reference other components defined in the YAML
       top_k: 5
@@ -14,6 +14,8 @@ components:    # define all the building-blocks for Pipeline
     type: FARMReader    # Haystack Class name for the component
     params:
       model_name_or_path: deepset/roberta-base-squad2
+  - name: myReader       # custom-name for the component; helpful for visualization & debugging
+    type: SimpleReader    # Haystack Class name for the component
   - name: TextFileConverter
     type: TextConverter
   - name: PDFFileConverter
@@ -29,8 +31,8 @@ pipelines:
     nodes:
       - name: ESRetriever
         inputs: [Query]
-      - name: Reader
-        inputs: [ESRetriever]
+      - name: myReader
+        inputs : [ESRetriever]
 
   - name: indexing
     type: Indexing
